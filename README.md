@@ -1,20 +1,41 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# 🚀 Campus-Dash
 
-# Run and deploy your AI Studio app
+A modern, streamlined dashboard designed to centralize essential information, services, and utilities for university students and staff.
 
-This contains everything you need to run your app locally.
+### ✨ Features
 
-View your app in AI Studio: https://ai.studio/apps/drive/1XHDXhKqggRu3jqIeQ4BIGICowqEKiDAf
+* **Modular Architecture:** Built with React and TypeScript for scalability and maintainability.
+* **Real-time Updates:** Designed to display current campus announcements, schedules, and events.
+* **Intuitive Interface:** A clean, user-friendly design focused on quick access to critical data.
+* **Campus Services Integration:** Links to internal systems, academic calendars, or resource booking.
 
-## Run Locally
+---
 
-**Prerequisites:**  Node.js
+### ⚙️ Tech Stack
+
+This project is built using the following core technologies:
+
+| Category | Technology |
+| :--- | :--- |
+| **Frontend** | React, TypeScript, Vite |
+| **Language** | TypeScript (97.8%) |
+| **Package Manager**| npm |
+
+---
+
+### 💻 Getting Started
+
+Follow these steps to set up and run the project locally.
+
+#### Prerequisites
+
+* Node.js (LTS version recommended)
+* npm or yarn
+
+#### 1. Clone the repository
+
+```bash
+git clone [https://github.com/Shakya99/Campus-Dash.git](https://github.com/Shakya99/Campus-Dash.git)
+cd Campus-Dash
 
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
