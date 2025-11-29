@@ -1,71 +1,59 @@
-import { User, Product, CartItem, Order } from '../types';
-import { PRODUCTS } from '../constants';
+// services/mockBackend.ts (Now powered by Dexie IndexedDB)
 
-// Keys for localStorage (Simulating Database Tables)
-const USERS_KEY = 'campus_dash_users';
-const SESSION_KEY = 'campus_dash_session';
-const PRODUCTS_KEY = 'campus_dash_products';
-const ORDERS_KEY = 'campus_dash_orders';
+import { User, Product, CartItem, Order } from '../types.ts'; // Ensure .ts extension is here
+import { db, seedProducts } from '../localDB.ts'; // Ensure .ts extension is here
 
 // Helper to simulate network delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const SESSION_KEY = 'campus_dash_session'; // Using localStorage for simple session ID
 
 export const mockBackend = {
-  // --- DATABASE INITIALIZATION ---
-  initializeDatabase() {
-    // Seed products if they don't exist
-    if (!localStorage.getItem(PRODUCTS_KEY)) {
-      localStorage.setItem(PRODUCTS_KEY, JSON.stringify(PRODUCTS));
-    }
-    // Initialize orders table if empty
-    if (!localStorage.getItem(ORDERS_KEY)) {
-      localStorage.setItem(ORDERS_KEY, JSON.stringify([]));
-    }
+  // --- DATABASE INITIALIZATION (Seeds the Dexie DB on first run) ---
+  async initializeDatabase() {
+    await seedProducts();
   },
 
   // --- AUTHENTICATION ---
 
   async login(email: string, password: string): Promise<User> {
-    await delay(800); // Simulate API latency
+    await delay(800);
+    
+    // Find user by email using Dexie's index
+    const user = await db.users.where('email').equalsIgnoreCase(email).first();
 
-    const usersStr = localStorage.getItem(USERS_KEY);
-    const users = usersStr ? JSON.parse(usersStr) : [];
-
-    const user = users.find((u: any) => u.email === email && u.password === password);
-
-    if (!user) {
+    if (!user || user.password !== password) {
       throw new Error('Invalid email or password');
     }
 
-    const { password: _, ...safeUser } = user; // Exclude password from session
+    const { password: _, ...safeUser } = user;
     localStorage.setItem(SESSION_KEY, JSON.stringify(safeUser));
-    return safeUser;
+    return safeUser as User; // Cast to User (without password)
   },
 
   async signup(name: string, email: string, password: string): Promise<User> {
     await delay(1000);
 
-    const usersStr = localStorage.getItem(USERS_KEY);
-    const users = usersStr ? JSON.parse(usersStr) : [];
+    const existingUser = await db.users.where('email').equalsIgnoreCase(email).first();
 
-    if (users.find((u: any) => u.email === email)) {
+    if (existingUser) {
       throw new Error('User already exists with this email');
     }
 
-    const newUser = {
-      id: Math.random().toString(36).substr(2, 9),
+    const newUser: User = {
+      id: Math.random().toString(36).substr(2, 9), 
       name,
       email,
-      password, // In a real app, this would be hashed
-      joinedAt: new Date().toISOString()
+      password, // Stored locally (for mock login check)
+      hostel: '',
+      room: '',
     };
 
-    users.push(newUser);
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
-
+    // Save the new user to the IndexedDB 'users' table
+    await db.users.add(newUser);
+    
     const { password: _, ...safeUser } = newUser;
     localStorage.setItem(SESSION_KEY, JSON.stringify(safeUser));
-    return safeUser;
+    return safeUser as User; // Cast to User (without password)
   },
 
   async logout(): Promise<void> {
@@ -75,16 +63,16 @@ export const mockBackend = {
 
   getCurrentUser(): User | null {
     const sessionStr = localStorage.getItem(SESSION_KEY);
-    return sessionStr ? JSON.parse(sessionStr) : null;
+    // Note: We cast to User, assuming the stored session lacks the password
+    return sessionStr ? JSON.parse(sessionStr) as User : null; 
   },
 
   // --- PRODUCT & INVENTORY MANAGEMENT ---
 
   async getProducts(): Promise<Product[]> {
-    this.initializeDatabase();
-    await delay(300); // Simulate network fetch
-    const products = localStorage.getItem(PRODUCTS_KEY);
-    return products ? JSON.parse(products) : [];
+    await this.initializeDatabase(); // Ensures data is seeded
+    await delay(300);
+    return db.products.toArray(); // Get all products from IndexedDB
   },
 
   // --- ORDER PROCESSING & PAYMENT ---
@@ -95,57 +83,61 @@ export const mockBackend = {
     deliveryDetails: { hostel: string; room: string },
     totalAmount: number
   ): Promise<Order> {
-    await delay(1500); // Simulate payment gateway processing
+    await delay(1500);
 
-    const products: Product[] = JSON.parse(localStorage.getItem(PRODUCTS_KEY) || '[]');
-    const orders: Order[] = JSON.parse(localStorage.getItem(ORDERS_KEY) || '[]');
+    // IndexedDB Transaction for atomic operations
+    return db.transaction('rw', db.products, db.orders, async () => {
+        // 1. Get the current product list within the transaction context
+        const products = await db.products.toArray();
+        
+        // 2. Validate Stock
+        for (const item of items) {
+          const product = products.find(p => p.id === item.id);
+          if (!product || product.stock < item.quantity) {
+            throw new Error(`Insufficient stock for ${item.name}. Only ${product?.stock || 0} left.`);
+          }
+        }
 
-    // 1. Transaction Start: Validate Stock
-    for (const item of items) {
-      const productIndex = products.findIndex(p => p.id === item.id);
-      if (productIndex === -1) throw new Error(`Product ${item.name} no longer available`);
-      
-      if (products[productIndex].stock < item.quantity) {
-        throw new Error(`Insufficient stock for ${item.name}. Only ${products[productIndex].stock} left.`);
-      }
-    }
+        // 3. Deduct Stock and prepare update array
+        const updatedProducts = products.map(product => {
+            const item = items.find(i => i.id === product.id);
+            if (item) {
+                return { ...product, stock: product.stock - item.quantity };
+            }
+            return product;
+        });
 
-    // 2. Deduct Stock (Update Database)
-    items.forEach(item => {
-      const productIndex = products.findIndex(p => p.id === item.id);
-      products[productIndex].stock -= item.quantity;
+        // 4. Update Stock
+        await db.products.bulkPut(updatedProducts);
+
+        // 5. Create Order Record
+        const newOrder: Order = {
+          id: 'ORD-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
+          userId,
+          items,
+          totalAmount,
+          status: 'confirmed',
+          createdAt: new Date().toISOString(),
+          deliveryDetails
+        };
+
+        // 6. Save Order
+        await db.orders.add(newOrder);
+
+        // 7. Return the new order to satisfy the Promise<Order> return type
+        return newOrder; 
     });
-    localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
-
-    // 3. Create Order Record
-    const newOrder: Order = {
-      id: 'ORD-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
-      userId,
-      items,
-      totalAmount,
-      status: 'confirmed', // Payment successful
-      createdAt: new Date().toISOString(),
-      deliveryDetails
-    };
-
-    // 4. Save Order
-    orders.push(newOrder);
-    localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
-
-    return newOrder;
   },
 
   async getUserOrders(userId: string): Promise<Order[]> {
     await delay(500);
-    const orders: Order[] = JSON.parse(localStorage.getItem(ORDERS_KEY) || '[]');
-    return orders.filter(o => o.userId === userId).sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    // Filter orders efficiently using the defined index 'userId'
+    return db.orders.where('userId').equalsIgnoreCase(userId).reverse().sortBy('createdAt');
   },
 
   // --- ANALYTICS (For Admin) ---
   async getOrderStats() {
-    const orders: Order[] = JSON.parse(localStorage.getItem(ORDERS_KEY) || '[]');
+    const orders = await db.orders.toArray();
     return {
       totalOrders: orders.length,
       totalRevenue: orders.reduce((sum, order) => sum + order.totalAmount, 0),
