@@ -5,9 +5,8 @@ A modern, streamlined dashboard designed to centralize essential information, se
 ### ✨ Features
 
 * **Modular Architecture:** Built with React and TypeScript for scalability and maintainability.
-* **Real-time Updates:** Designed to display current campus announcements, schedules, and events.
+* **Real-time Updates:** Designed to display current items available in warehouse and delivery status and track changes on every purchase of the items.
 * **Intuitive Interface:** A clean, user-friendly design focused on quick access to critical data.
-* **Campus Services Integration:** Links to internal systems, academic calendars, or resource booking.
 
 ---
 
