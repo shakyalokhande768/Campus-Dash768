@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import Header from './components/Header';
 import ProductCard from './components/ProductCard';
@@ -28,14 +27,24 @@ function App() {
   const [isOrdersModalOpen, setIsOrdersModalOpen] = useState(false);
   const [isOrderSuccessModalOpen, setIsOrderSuccessModalOpen] = useState(false);
 
-  // Initialize App
+  // Initialize App - This hook runs once to set up the DB and fetch initial data
   useEffect(() => {
     const initApp = async () => {
-      // Check session
+      
+      // 1. INITIALIZE DATABASE: This seeds the products into IndexedDB 
+      //    and ensures the database structure is ready.
+      try {
+        await mockBackend.initializeDatabase(); 
+      } catch (e) {
+        console.error("Failed to initialize IndexedDB:", e);
+        // Continue loading even if initialization fails, perhaps with empty data.
+      }
+      
+      // 2. Check session
       const currentUser = mockBackend.getCurrentUser();
       if (currentUser) setUser(currentUser);
 
-      // Fetch dynamic products from DB
+      // 3. Fetch dynamic products from DB
       try {
         const fetchedProducts = await mockBackend.getProducts();
         setProducts(fetchedProducts);
